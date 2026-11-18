@@ -99,6 +99,7 @@ it('shows doctors their assigned consultation details in cards without other doc
         ->assertSee($startTime->format('d/m/Y - h:i A'))
         ->assertSee('Dolor de espalda asignado')
         ->assertSee('Confirmada')
+        ->assertDontSee('<option value="confirmada"', false)
         ->assertDontSee('Solicitudes disponibles')
         ->assertDontSee('No hay solicitudes disponibles para tus servicios')
         ->assertSee('Reagendar')
@@ -143,8 +144,8 @@ it('rejects bookings for services without an assigned doctor', function () {
     $this->assertDatabaseCount('appointments', 0);
 });
 
-it('blocks doctors and administrators from opening or submitting booking requests', function (string $roleName) {
-    $user = appointmentTestUser($roleName);
+it('blocks administrators from opening or submitting booking requests', function () {
+    $user = appointmentTestUser('admin');
     $service = appointmentTestService();
 
     $this->actingAs($user)
@@ -157,10 +158,7 @@ it('blocks doctors and administrators from opening or submitting booking request
     ])->assertForbidden();
 
     $this->assertDatabaseCount('appointments', 0);
-})->with([
-    'doctor' => 'doctor',
-    'administrator' => 'admin',
-]);
+});
 
 it('does not show booking controls to administrators', function () {
     $admin = appointmentTestUser('admin');
@@ -174,6 +172,107 @@ it('does not show booking controls to administrators', function () {
     $this->get(route('appointments.index'))
         ->assertOk()
         ->assertDontSee('Agendar nueva cita');
+});
+
+it('lets doctors open the booking form and see registered patients for their services', function () {
+    $doctor = appointmentTestUser('doctor');
+    $patient = appointmentTestUser('cliente', ['name' => 'Paciente Registrado', 'carnet' => 'PAC001']);
+    $anotherDoctor = appointmentTestUser('doctor', ['name' => 'Otro Doctor']);
+    $service = appointmentTestService();
+    $unassignedService = appointmentTestService('Servicio de otro doctor');
+    $service->doctors()->attach($doctor);
+
+    $this->actingAs($doctor)
+        ->get(route('appointments.create'))
+        ->assertOk()
+        ->assertSee('Paciente Registrado')
+        ->assertSee('PAC001')
+        ->assertSee($service->nombre)
+        ->assertDontSee('Otro Doctor')
+        ->assertDontSee($unassignedService->nombre);
+});
+
+it('lets a doctor book an appointment for a registered patient under their assigned service', function () {
+    $doctor = appointmentTestUser('doctor');
+    $patient = appointmentTestUser('cliente');
+    $anotherPatient = appointmentTestUser('cliente');
+    $service = appointmentTestService();
+    $service->doctors()->attach($doctor);
+    $startTime = appointmentTestStart();
+
+    $this->actingAs($doctor)
+        ->post(route('appointments.store'), [
+            'patient_id' => $patient->id,
+            'service_id' => $service->id,
+            'fecha_hora' => $startTime->format('Y-m-d\TH:i'),
+            'motivo' => 'Cita agendada por el doctor',
+        ])
+        ->assertRedirect(route('appointments.index'));
+
+    $this->assertDatabaseHas('appointments', [
+        'patient_id' => $patient->id,
+        'doctor_id' => $doctor->id,
+        'service_id' => $service->id,
+        'fecha_hora' => $startTime->format('Y-m-d H:i:s'),
+        'motivo' => 'Cita agendada por el doctor',
+        'estado' => 'pendiente',
+    ]);
+
+    $this->assertDatabaseMissing('appointments', [
+        'patient_id' => $doctor->id,
+    ]);
+});
+
+it('rejects doctor bookings for non-patients and services outside their assignment', function (string $invalidField) {
+    $doctor = appointmentTestUser('doctor');
+    $patient = appointmentTestUser('cliente');
+    $service = appointmentTestService();
+    $otherService = appointmentTestService('Servicio no asignado');
+    $service->doctors()->attach($doctor);
+
+    $payload = [
+        'patient_id' => $patient->id,
+        'service_id' => $service->id,
+        'fecha_hora' => appointmentTestStart()->format('Y-m-d\TH:i'),
+    ];
+
+    if ($invalidField === 'patient_id') {
+        $payload['patient_id'] = $doctor->id;
+    } else {
+        $payload['service_id'] = $otherService->id;
+    }
+
+    $this->actingAs($doctor)
+        ->post(route('appointments.store'), $payload)
+        ->assertSessionHasErrors($invalidField);
+
+    $this->assertDatabaseCount('appointments', 0);
+})->with([
+    'a doctor cannot be selected as the patient' => 'patient_id',
+    'an unassigned service cannot be booked' => 'service_id',
+]);
+
+it('keeps a patient booking attached to the authenticated patient even if another id is submitted', function () {
+    $patient = appointmentTestUser('cliente');
+    $otherPatient = appointmentTestUser('cliente');
+    $doctor = appointmentTestUser('doctor');
+    $service = appointmentTestService();
+    $service->doctors()->attach($doctor);
+    $startTime = appointmentTestStart();
+
+    $this->actingAs($patient)
+        ->post(route('appointments.store'), [
+            'patient_id' => $otherPatient->id,
+            'service_id' => $service->id,
+            'fecha_hora' => $startTime->format('Y-m-d\TH:i'),
+        ])
+        ->assertRedirect(route('appointments.index'));
+
+    $this->assertDatabaseHas('appointments', [
+        'patient_id' => $patient->id,
+        'doctor_id' => $doctor->id,
+        'service_id' => $service->id,
+    ]);
 });
 
 it('assigns the service doctor even when they have an active consultation', function () {
@@ -637,6 +736,30 @@ it('prevents a doctor from changing another doctor appointment', function () {
     ]);
 });
 
+it('does not let doctors set the confirmed state from the appointment status control', function () {
+    $doctor = appointmentTestUser('doctor');
+    $patient = appointmentTestUser('cliente');
+    $service = appointmentTestService();
+    $appointment = Appointment::create([
+        'patient_id' => $patient->id,
+        'doctor_id' => $doctor->id,
+        'service_id' => $service->id,
+        'fecha_hora' => appointmentTestStart(),
+        'estado' => 'pendiente',
+    ]);
+
+    $this->actingAs($doctor)
+        ->patch(route('appointments.updateStatus', $appointment), [
+            'estado' => 'confirmada',
+        ])
+        ->assertSessionHasErrors('estado');
+
+    $this->assertDatabaseHas('appointments', [
+        'id' => $appointment->id,
+        'estado' => 'pendiente',
+    ]);
+});
+
 it('defines who can create and reschedule appointments in the policy', function () {
     $patient = appointmentTestUser('cliente');
     $doctor = appointmentTestUser('doctor');
@@ -660,7 +783,7 @@ it('defines who can create and reschedule appointments in the policy', function 
     $policy = new AppointmentPolicy;
 
     expect($policy->create($patient))->toBeTrue()
-        ->and($policy->create($doctor))->toBeFalse()
+        ->and($policy->create($doctor))->toBeTrue()
         ->and($policy->create($admin))->toBeFalse()
         ->and($policy->reschedule($doctor, $activeAppointment))->toBeTrue()
         ->and($policy->reschedule($otherDoctor, $activeAppointment))->toBeFalse()

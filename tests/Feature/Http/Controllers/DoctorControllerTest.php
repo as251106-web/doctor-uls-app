@@ -15,11 +15,10 @@ function doctorManagementUser(string $roleName, array $attributes = []): User
     ], $attributes));
 }
 
-it('lets administrators view doctors and assign the doctor role through user management', function () {
+it('lets administrators view doctors without being able to change user roles', function () {
     $admin = doctorManagementUser('admin');
     $existingDoctor = doctorManagementUser('doctor', ['name' => 'Doctor Existente']);
     $patient = doctorManagementUser('cliente', ['name' => 'Paciente']);
-    $doctorRole = Role::where('nombre', 'doctor')->firstOrFail();
 
     $this->actingAs($admin)
         ->get(route('doctors.index'))
@@ -32,10 +31,17 @@ it('lets administrators view doctors and assign the doctor role through user man
     $this->post('/doctors', [])->assertStatus(405);
 
     $this->actingAs($admin)
-        ->patch(route('users.updateRole', $patient), ['role_id' => $doctorRole->id])
-        ->assertRedirect();
+        ->get(route('users.index'))
+        ->assertOk()
+        ->assertSee('Paciente')
+        ->assertSee('Cliente')
+        ->assertDontSee('Cambiar Rol')
+        ->assertDontSee('name="role_id"', false);
 
-    expect($patient->fresh()->isDoctor())->toBeTrue();
+    $this->patch('/users/'.$patient->id.'/role', ['role_id' => $patient->role_id])
+        ->assertNotFound();
+
+    expect($patient->fresh()->isCliente())->toBeTrue();
     $this->assertModelExists($existingDoctor);
 });
 

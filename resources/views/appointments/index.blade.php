@@ -1,5 +1,7 @@
 <x-layout>
+    {{-- Aquí se arma la pantalla de citas según el rol que inició sesión. --}}
     <div class="max-w-6xl mx-auto space-y-8">
+        {{-- El título y el texto cambian para distinguir la agenda del doctor de las citas del paciente. --}}
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h1 class="text-3xl font-extrabold text-blue-900">
@@ -13,20 +15,23 @@
                     @if(Auth::user()->isAdmin())
                         Agenda general de citas registradas en el sistema Doctor ULS.
                     @elseif(Auth::user()->isDoctor())
-                        Consulta tu agenda y las solicitudes disponibles de tus servicios.
+                        Consulta tu agenda y las citas asignadas a tus servicios.
                     @else
                         Historial y seguimiento de tus citas médicas solicitadas.
                     @endif
                 </p>
             </div>
 
-            @if(Auth::user()->isCliente())
+            {{-- El paciente agenda para sí mismo y el doctor puede agendar para un paciente registrado. --}}
+            @if(Auth::user()->isCliente() || Auth::user()->isDoctor())
                 <a href="{{ route('appointments.create') }}" class="inline-flex items-center gap-2 bg-blue-900 hover:bg-blue-800 text-white font-bold px-5 py-2.5 rounded-xl transition shadow">
-                    <span>➕</span> Agendar nueva cita
+                    <span>➕</span>
+                    {{ Auth::user()->isDoctor() ? 'Agendar cita para paciente' : 'Agendar nueva cita' }}
                 </a>
             @endif
         </div>
 
+        {{-- Si una acción falla, mostramos aquí los mensajes para que el usuario sepa qué corregir. --}}
         @if($errors->any())
             <div class="bg-rose-100 border-l-4 border-rose-500 text-rose-800 p-4 rounded-xl">
                 <ul class="list-disc list-inside space-y-1">
@@ -37,8 +42,10 @@
             </div>
         @endif
 
+        {{-- Los pacientes y doctores ven sus citas en tarjetas; el admin tiene una tabla general abajo. --}}
         @if(!Auth::user()->isAdmin())
             @php
+                // Estos arreglos ponen una etiqueta y un color a cada estado de cita.
                 $appointmentStatusStyles = [
                     'pendiente' => 'border-amber-200 bg-amber-100 text-amber-800',
                     'confirmada' => 'border-blue-200 bg-blue-100 text-blue-800',
@@ -53,6 +60,7 @@
                 ];
             @endphp
 
+            {{-- Esta lista incluye solo las citas del paciente o del doctor que inició sesión. --}}
             <section class="space-y-4">
                 <div>
                     <h2 class="text-xl font-bold text-blue-900">
@@ -68,6 +76,7 @@
                     </div>
                 @else
                     <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                        {{-- Mostramos los datos principales de cada cita en una tarjeta. --}}
                         @foreach($appointments as $appointment)
                             <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                                 <header class="flex flex-wrap items-start justify-between gap-3">
@@ -80,6 +89,7 @@
                                     </span>
                                 </header>
 
+                                {{-- El doctor ve al paciente; el paciente ve al doctor asignado. --}}
                                 <dl class="grid gap-4 sm:grid-cols-2">
                                     <div>
                                         <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -102,17 +112,20 @@
                                     </div>
                                 </dl>
 
+                                {{-- Aquí se conserva el síntoma o motivo que se escribió al agendar. --}}
                                 <div class="rounded-xl bg-slate-50 p-4">
                                     <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Síntoma o motivo</p>
                                     <p class="mt-1 text-sm text-slate-700">{{ $appointment->motivo ?: 'Sin especificación' }}</p>
                                 </div>
 
+                                {{-- Cuando la consulta termina, el paciente o doctor autorizado puede abrir su expediente. --}}
                                 @if($appointment->estado === 'completada')
                                     <a href="{{ route('medical-records.show', $appointment) }}" class="inline-flex font-bold text-blue-900 hover:underline">
                                         Ver expediente de la consulta
                                     </a>
                                 @endif
 
+                                {{-- El doctor puede cambiar la fecha mientras su cita siga abierta. --}}
                                 @if(Auth::user()->isDoctor() && !in_array($appointment->estado, ['completada', 'cancelada'], true))
                                     <form action="{{ route('appointments.reschedule', $appointment) }}" method="POST" class="space-y-2 border-t border-slate-100 pt-4">
                                         @csrf
@@ -124,17 +137,19 @@
                                         </div>
                                     </form>
 
+                                    {{-- Desde aquí el doctor termina o cancela una cita que tiene asignada. --}}
                                     <form action="{{ route('appointments.updateStatus', $appointment) }}" method="POST" class="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
                                         @csrf
                                         @method('PATCH')
                                         <label for="estado_{{ $appointment->id }}" class="text-xs font-semibold text-slate-600">Actualizar estado</label>
-                                        <select id="estado_{{ $appointment->id }}" name="estado" onchange="this.form.submit()" class="w-32 shrink-0 rounded-lg border-slate-300 py-1.5 pl-2 pr-8 text-left text-xs font-semibold shadow-sm focus:border-blue-900 focus:ring-blue-900">
-                                            <option value="confirmada" {{ $appointment->estado === 'confirmada' ? 'selected' : '' }}>Confirmada</option>
-                                            <option value="completada">Completada</option>
-                                            <option value="cancelada">Cancelada</option>
+                                        <select id="estado_{{ $appointment->id }}" name="estado" onchange="this.form.submit()" class="w-32 shrink-0 rounded-lg border-slate-300 py-1.5 pl-1 pr-8 text-left text-xs font-semibold shadow-sm focus:border-blue-900 focus:ring-blue-900">
+                                            <option value="" selected disabled>Pendiente</option>
+                                            <option value="completada">Completar</option>
+                                            <option value="cancelada">Cancelar</option>
                                         </select>
                                     </form>
                                 @elseif(Auth::user()->isCliente() && !in_array($appointment->estado, ['cancelada', 'completada'], true))
+                                    {{-- El paciente puede cancelar sus citas que todavía no están cerradas. --}}
                                     <form action="{{ route('appointments.cancel', $appointment) }}" method="POST" class="border-t border-slate-100 pt-4" onsubmit="return confirm('¿Seguro que deseas cancelar esta cita médica?');">
                                         @csrf
                                         @method('PATCH')
@@ -148,6 +163,7 @@
             </section>
         @endif
 
+        {{-- El administrador consulta aquí todas las citas y puede ajustar sus estados. --}}
         @if(Auth::user()->isAdmin())
         <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div class="p-5 border-b border-slate-200">
@@ -170,6 +186,7 @@
             @else
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
+                        {{-- Los encabezados dependen de la información que se muestra al administrador. --}}
                         <thead>
                             <tr class="bg-slate-100 text-slate-700 text-xs font-bold uppercase border-b border-slate-200">
                                 @if(Auth::user()->isAdmin() || Auth::user()->isDoctor())
@@ -187,6 +204,7 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200 text-sm">
+                            {{-- Cada fila corresponde a una cita registrada en el sistema. --}}
                             @foreach($appointments as $appointment)
                                 <tr class="hover:bg-slate-50 transition">
                                     @if(Auth::user()->isAdmin() || Auth::user()->isDoctor())
@@ -211,12 +229,14 @@
                                         @endif
                                     </td>
                                     <td class="py-3 px-4 text-right">
+                                        {{-- El admin puede leer el expediente de las consultas ya completadas. --}}
                                         @if(Auth::user()->isAdmin() && $appointment->estado === 'completada')
                                             <a href="{{ route('medical-records.show', $appointment) }}" class="mr-3 inline-flex font-bold text-blue-900 hover:underline">
                                                 Ver detalles
                                             </a>
                                         @endif
 
+                                        {{-- Aquí se cambian estados desde el panel admin; el paciente solo puede cancelar. --}}
                                         @if(Auth::user()->isAdmin() || (Auth::user()->isDoctor() && !in_array($appointment->estado, ['completada', 'cancelada'], true)))
                                             <form action="{{ route('appointments.updateStatus', $appointment) }}" method="POST" class="inline-flex items-center gap-1">
                                                 @csrf

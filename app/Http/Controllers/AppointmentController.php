@@ -47,23 +47,42 @@ class AppointmentController extends Controller
     public function create(): View
     {
         Gate::authorize('create', Appointment::class);
+        /** @var User $user */
+        $user = Auth::user();
 
         $services = Service::query()
             ->where('activo', true)
+            ->when(
+                $user->isDoctor(),
+                fn (EloquentBuilder $query) => $query->whereHas(
+                    'doctors',
+                    fn (EloquentBuilder $doctors) => $doctors->where('users.id', $user->id),
+                ),
+            )
             ->with(['doctors' => fn ($query) => $query->withCount([
                 'doctorAppointments as active_appointments_count' => fn ($appointments) => $appointments
                     ->whereIn('estado', ['pendiente', 'confirmada']),
             ])])
             ->get();
 
-        return view('appointments.create', compact('services'));
+        $patients = $user->isDoctor()
+            ? User::query()
+                ->whereHas('role', fn (EloquentBuilder $query) => $query->where('nombre', 'cliente'))
+                ->select(['id', 'name', 'carnet'])
+                ->orderBy('name')
+                ->get()
+            : collect();
+
+        return view('appointments.create', compact('services', 'patients'));
     }
 
     public function store(Request $request): RedirectResponse
     {
         Gate::authorize('create', Appointment::class);
+        /** @var User $user */
+        $user = Auth::user();
 
-        $validated = $request->validate([
+        $rules = [
             'service_id' => [
                 'required',
                 'integer',
@@ -71,12 +90,41 @@ class AppointmentController extends Controller
             ],
             'fecha_hora' => ['required', 'date', 'after:now'],
             'motivo' => ['nullable', 'string', 'max:500'],
-        ]);
+        ];
+
+        if ($user->isDoctor()) {
+            $rules['patient_id'] = ['required', 'integer', 'exists:users,id'];
+        }
+
+        $validated = $request->validate($rules);
 
         $startTime = Carbon::parse($validated['fecha_hora']);
-        $appointment = DB::transaction(function () use ($validated, $startTime): Appointment {
+        $appointment = DB::transaction(function () use ($validated, $startTime, $user): Appointment {
             $service = Service::findOrFail($validated['service_id']);
-            $doctor = $this->findServiceDoctor($service);
+
+            if ($user->isDoctor()) {
+                $patient = User::query()
+                    ->whereKey($validated['patient_id'])
+                    ->whereHas('role', fn (EloquentBuilder $query) => $query->where('nombre', 'cliente'))
+                    ->first();
+
+                if ($patient === null) {
+                    throw ValidationException::withMessages([
+                        'patient_id' => 'Selecciona una cuenta con rol de paciente.',
+                    ]);
+                }
+
+                if (! $user->services()->where('services.id', $service->id)->exists()) {
+                    throw ValidationException::withMessages([
+                        'service_id' => 'Solo puedes agendar citas para los servicios asignados a tu cuenta.',
+                    ]);
+                }
+
+                $doctor = $user;
+            } else {
+                $patient = $user;
+                $doctor = $this->findServiceDoctor($service);
+            }
 
             if ($doctor === null) {
                 throw ValidationException::withMessages([
@@ -85,7 +133,7 @@ class AppointmentController extends Controller
             }
 
             return Appointment::create([
-                'patient_id' => Auth::id(),
+                'patient_id' => $patient->id,
                 'doctor_id' => $doctor->id,
                 'service_id' => $service->id,
                 'fecha_hora' => $startTime,
@@ -96,7 +144,12 @@ class AppointmentController extends Controller
 
         return redirect()
             ->route('appointments.index')
-            ->with('success', 'Tu cita quedó registrada en la agenda del doctor asignado.');
+            ->with(
+                'success',
+                $user->isDoctor()
+                    ? 'La cita quedó registrada en tu agenda para el paciente seleccionado.'
+                    : 'Tu cita quedó registrada en la agenda del doctor asignado.',
+            );
     }
 
     public function reschedule(Request $request, Appointment $appointment): RedirectResponse
@@ -197,7 +250,7 @@ class AppointmentController extends Controller
 
         $allowedStatuses = $user->isAdmin()
             ? ['pendiente', 'confirmada', 'completada', 'cancelada']
-            : ['confirmada', 'completada', 'cancelada'];
+            : ['completada', 'cancelada'];
 
         $validated = $request->validate([
             'estado' => ['required', Rule::in($allowedStatuses)],

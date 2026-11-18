@@ -20,13 +20,15 @@
             <div class="flex flex-wrap items-center justify-end gap-3 md:gap-4 text-sm font-semibold">
 
                 @auth
-                    @if(!$isAdmin)
+                    @if(!$isAdmin && !Auth::user()->isDoctor())
                         <a href="{{ route('home') }}" class="hover:text-blue-200">Inicio</a>
                     @endif
 
-                    <a href="{{ route('appointments.index') }}" class="hover:text-blue-200">
-                        {{ Auth::user()->isCliente() ? 'Mis citas' : 'Citas médicas' }}
-                    </a>
+                    @if(!Auth::user()->isDoctor())
+                        <a href="{{ route('appointments.index') }}" class="hover:text-blue-200">
+                            {{ Auth::user()->isCliente() ? 'Mis citas' : 'Citas médicas' }}
+                        </a>
+                    @endif
 
                     @if($isAdmin)
                         <a href="{{ route('services.index') }}" class="hover:text-blue-200">Servicios</a>

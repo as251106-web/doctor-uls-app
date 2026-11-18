@@ -10,7 +10,7 @@
 
         @guest
             <a href="{{ route('register') }}" class="inline-flex items-center gap-2 bg-blue-900 text-white px-8 py-3.5 rounded-xl font-bold hover:bg-blue-800 transition shadow-md">
-                <span>📝</span> Registrarme con mi Carné ULS
+                <span>📝</span> Registrarme
             </a>
         @elseif(Auth::user()->isCliente())
             <a href="{{ route('appointments.create') }}" class="inline-flex items-center gap-2 bg-blue-900 text-white px-8 py-3.5 rounded-xl font-bold hover:bg-blue-800 transition shadow-md">
@@ -21,7 +21,7 @@
 
     <!-- Sección de Servicios Médicos -->
     <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <h2 class="text-2xl font-bold text-slate;-900 flex items-center gap-2">
             <span>📋</span> Servicios Médicos Disponibles
         </h2>
         <span class="text-xs text-slate-800">Atención presencial en campus</span>

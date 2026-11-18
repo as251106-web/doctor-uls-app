@@ -9,7 +9,7 @@ class AppointmentPolicy
 {
     public function create(User $user): bool
     {
-        return $user->isCliente();
+        return $user->isCliente() || $user->isDoctor();
     }
 
     public function reschedule(User $user, Appointment $appointment): bool

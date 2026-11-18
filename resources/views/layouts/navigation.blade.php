@@ -14,15 +14,17 @@
                 </a>
 
                 <div class="hidden flex-wrap items-center gap-5 sm:flex">
-                    @if(!$isAdmin)
+                    @if(!$isAdmin && !$user->isDoctor())
                         <x-nav-link :href="route('home')" :active="request()->routeIs('home')">
                             Inicio
                         </x-nav-link>
                     @endif
 
-                    <x-nav-link :href="route('appointments.index')" :active="request()->routeIs('appointments.*')">
-                        {{ $appointmentsLabel }}
-                    </x-nav-link>
+                    @if(!$user->isDoctor())
+                        <x-nav-link :href="route('appointments.index')" :active="request()->routeIs('appointments.*')">
+                            {{ $appointmentsLabel }}
+                        </x-nav-link>
+                    @endif
 
                     @if($user->isCliente())
                         <x-nav-link :href="route('medical-history.index')" :active="request()->routeIs('medical-history.*')">
@@ -83,15 +85,17 @@
 
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="space-y-1 px-4 pt-2 pb-3">
-            @if(!$isAdmin)
+            @if(!$isAdmin && !$user->isDoctor())
                 <x-responsive-nav-link :href="route('home')" :active="request()->routeIs('home')">
                     Inicio
                 </x-responsive-nav-link>
             @endif
 
-            <x-responsive-nav-link :href="route('appointments.index')" :active="request()->routeIs('appointments.*')">
-                {{ $appointmentsLabel }}
-            </x-responsive-nav-link>
+            @if(!$user->isDoctor())
+                <x-responsive-nav-link :href="route('appointments.index')" :active="request()->routeIs('appointments.*')">
+                    {{ $appointmentsLabel }}
+                </x-responsive-nav-link>
+            @endif
 
             @if($user->isCliente())
                 <x-responsive-nav-link :href="route('medical-history.index')" :active="request()->routeIs('medical-history.*')">

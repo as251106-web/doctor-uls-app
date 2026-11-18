@@ -59,7 +59,6 @@ Route::middleware(['auth'])->group(function () {
 
     // Módulo de Gestión de Usuarios y Roles (Exclusivo Administrador)
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
-    Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.updateRole');
 
     // Listado de doctores; los cambios de rol se realizan desde Usuarios.
     Route::get('/doctors', [DoctorController::class, 'index'])->name('doctors.index');
