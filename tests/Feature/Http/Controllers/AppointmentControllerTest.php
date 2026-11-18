@@ -357,7 +357,7 @@ it('keeps appointments assigned to the service doctor without a separate request
         ->assertSee('Paciente en espera');
 });
 
-it('lets administrators open completed consultation details from the appointment list', function () {
+it('lets administrators read completed consultation details without status controls', function () {
     $admin = appointmentTestUser('admin');
     $patient = appointmentTestUser('cliente');
     $doctor = appointmentTestUser('doctor');
@@ -375,7 +375,40 @@ it('lets administrators open completed consultation details from the appointment
         ->get(route('appointments.index'))
         ->assertOk()
         ->assertSee('Ver detalles')
-        ->assertSee(route('medical-records.show', $appointment));
+        ->assertSee(route('medical-records.show', $appointment))
+        ->assertSee('Completada')
+        ->assertDontSee('Confirmar')
+        ->assertDontSee('Completar')
+        ->assertDontSee('Cancelar')
+        ->assertDontSee(route('appointments.updateStatus', $appointment));
+});
+
+it('prevents administrators from changing or cancelling appointments directly', function () {
+    $admin = appointmentTestUser('admin');
+    $patient = appointmentTestUser('cliente');
+    $doctor = appointmentTestUser('doctor');
+    $service = appointmentTestService();
+    $appointment = Appointment::create([
+        'patient_id' => $patient->id,
+        'doctor_id' => $doctor->id,
+        'service_id' => $service->id,
+        'fecha_hora' => appointmentTestStart(),
+        'estado' => 'pendiente',
+    ]);
+
+    $this->actingAs($admin)
+        ->patch(route('appointments.updateStatus', $appointment), [
+            'estado' => 'cancelada',
+        ])
+        ->assertForbidden();
+
+    $this->patch(route('appointments.cancel', $appointment))
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('appointments', [
+        'id' => $appointment->id,
+        'estado' => 'pendiente',
+    ]);
 });
 
 it('shows service doctor availability on the appointment form', function () {

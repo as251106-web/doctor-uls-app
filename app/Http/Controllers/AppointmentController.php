@@ -233,27 +233,23 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Permite al administrador cambiar cualquier estado y al doctor el de su propia cita.
+     * Permite al doctor actualizar el estado de su propia cita.
      */
     public function updateStatus(Request $request, Appointment $appointment): RedirectResponse
     {
         /** @var User $user */
         $user = Auth::user();
 
-        if (! $user->isAdmin() && (! $user->isDoctor() || $appointment->doctor_id !== $user->id)) {
+        if (! $user->isDoctor() || $appointment->doctor_id !== $user->id) {
             abort(403, 'No tienes permisos para realizar esta acción.');
         }
 
-        if ($user->isDoctor() && in_array($appointment->estado, ['completada', 'cancelada'], true)) {
+        if (in_array($appointment->estado, ['completada', 'cancelada'], true)) {
             abort(403, 'Esta cita ya está cerrada.');
         }
 
-        $allowedStatuses = $user->isAdmin()
-            ? ['pendiente', 'confirmada', 'completada', 'cancelada']
-            : ['completada', 'cancelada'];
-
         $validated = $request->validate([
-            'estado' => ['required', Rule::in($allowedStatuses)],
+            'estado' => ['required', Rule::in(['completada', 'cancelada'])],
         ]);
 
         $appointment->update(['estado' => $validated['estado']]);
@@ -266,8 +262,7 @@ class AppointmentController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
-        $isAuthorized = $user->isAdmin()
-            || ($user->isDoctor() && $appointment->doctor_id === $user->id)
+        $isAuthorized = ($user->isDoctor() && $appointment->doctor_id === $user->id)
             || ($user->isCliente() && $appointment->patient_id === $user->id);
 
         if (! $isAuthorized || in_array($appointment->estado, ['completada', 'cancelada'], true)) {

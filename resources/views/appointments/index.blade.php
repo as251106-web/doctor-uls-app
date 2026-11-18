@@ -163,7 +163,7 @@
             </section>
         @endif
 
-        {{-- El administrador consulta aquí todas las citas y puede ajustar sus estados. --}}
+        {{-- El administrador consulta aquí todas las citas y puede abrir los expedientes completados. --}}
         @if(Auth::user()->isAdmin())
         <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div class="p-5 border-b border-slate-200">
@@ -200,7 +200,7 @@
                                 <th class="py-3 px-4">Fecha y Hora</th>
                                 <th class="py-3 px-4">Motivo</th>
                                 <th class="py-3 px-4">Estado</th>
-                                <th class="py-3 px-4 text-right">Acción</th>
+                                <th class="py-3 px-4 text-right">Detalles</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200 text-sm">
@@ -229,35 +229,14 @@
                                         @endif
                                     </td>
                                     <td class="py-3 px-4 text-right">
-                                        {{-- El admin puede leer el expediente de las consultas ya completadas. --}}
                                         @if(Auth::user()->isAdmin() && $appointment->estado === 'completada')
-                                            <a href="{{ route('medical-records.show', $appointment) }}" class="mr-3 inline-flex font-bold text-blue-900 hover:underline">
+                                            {{-- Si está completada, mostramos el botón para ver el expediente --}}
+                                            <a href="{{ route('medical-records.show', $appointment) }}" class="inline-flex font-bold text-blue-900 hover:underline">
                                                 Ver detalles
                                             </a>
-                                        @endif
-
-                                        {{-- Aquí se cambian estados desde el panel admin; el paciente solo puede cancelar. --}}
-                                        @if(Auth::user()->isAdmin() || (Auth::user()->isDoctor() && !in_array($appointment->estado, ['completada', 'cancelada'], true)))
-                                            <form action="{{ route('appointments.updateStatus', $appointment) }}" method="POST" class="inline-flex items-center gap-1">
-                                                @csrf
-                                                @method('PATCH')
-                                                <select name="estado" onchange="this.form.submit()" class="w-32 shrink-0 rounded-lg border-slate-300 py-1 pl-2 pr-8 text-left text-xs font-semibold bg-white shadow-sm focus:ring-blue-900">
-                                                    @if(Auth::user()->isAdmin())
-                                                        <option value="pendiente" {{ $appointment->estado === 'pendiente' ? 'selected' : '' }}>Pendiente</option>
-                                                    @endif
-                                                    <option value="confirmada" {{ $appointment->estado === 'confirmada' ? 'selected' : '' }}>Confirmar</option>
-                                                    <option value="completada" {{ $appointment->estado === 'completada' ? 'selected' : '' }}>Completar</option>
-                                                    <option value="cancelada" {{ $appointment->estado === 'cancelada' ? 'selected' : '' }}>Cancelar</option>
-                                                </select>
-                                            </form>
-                                        @elseif(Auth::user()->isCliente() && !in_array($appointment->estado, ['cancelada', 'completada'], true))
-                                            <form action="{{ route('appointments.cancel', $appointment) }}" method="POST" class="inline" onsubmit="return confirm('¿Seguro que deseas cancelar esta cita médica?');">
-                                                @csrf
-                                                @method('PATCH')
-                                                <button type="submit" class="text-rose-600 hover:text-rose-800 text-xs font-bold hover:underline">Cancelar</button>
-                                            </form>
                                         @else
-                                            <span class="text-slate-400 text-xs">—</span>
+                                            {{-- Si NO está completada, mostramos el texto indicativo --}}
+                                            <span class="text-slate-400 text-xs">Aún pendiente</span>
                                         @endif
                                     </td>
                                 </tr>
