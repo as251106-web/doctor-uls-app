@@ -60,8 +60,12 @@ Route::middleware(['auth'])->group(function () {
     // Módulo de Gestión de Usuarios y Roles (Exclusivo Administrador)
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
 
-    // Listado de doctores; los cambios de rol se realizan desde Usuarios.
+    // Administración de cuentas de doctores y sus especializaciones.
     Route::get('/doctors', [DoctorController::class, 'index'])->name('doctors.index');
+    Route::get('/doctors/create', [DoctorController::class, 'create'])->name('doctors.create');
+    Route::post('/doctors', [DoctorController::class, 'store'])->name('doctors.store');
+    Route::get('/doctors/{doctor}/edit', [DoctorController::class, 'edit'])->name('doctors.edit');
+    Route::patch('/doctors/{doctor}', [DoctorController::class, 'update'])->name('doctors.update');
 });
 
 // Rutas de autenticación de Breeze (login, register, logout)
